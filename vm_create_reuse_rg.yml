@@ -1,0 +1,60 @@
+# Description
+# ===========
+# This playbook creates a single Azure VM with public IP, and opens port 22 for SSH
+
+- name: Retrieve existing VM count
+  hosts: localhost
+  connection: local
+  vars:
+    resource_group: "{{ resource_group }}"
+
+  tasks:
+  - name: Retrieve existing VMs information
+    azure_rm_virtualmachine_info:
+      resource_group: "{{ resource_group }}"
+    register: existing_vms_info
+
+  - name: Set total VM count
+    set_fact:
+      total_vm_count: "{{ existing_vms_info.virtual_machines | length }}"
+
+- name: Create Azure VM
+  hosts: localhost
+  connection: local
+  vars:
+    resource_group: "{{ resource_group }}"
+    vm_prefix: "hub"
+    location: "{{ location }}"
+    total_vm_count: 0
+
+  tasks:
+  - name: Retrieve existing VM count
+    include_tasks: vm_count_retrieval.yaml
+
+  - name: Determine next VM number
+    set_fact:
+      next_vm_number: "{{ total_vm_count + 1 }}"
+
+  - name: Create VM
+    azure_rm_virtualmachine:
+      resource_group: "{{ resource_group }}"
+      name: "{{ vm_prefix }}_{{ location }}_{{ next_vm_number }}"
+      vm_size: Standard_DS1_v2
+      admin_username: nitink
+      admin_password: Password@123_1008
+      network_interfaces:
+        - name: "{{ location }}-nic-{{ next_vm_number }}"
+          primary: true
+      public_ip_allocation_method: Static
+      image:
+        offer: UbuntuServer
+        publisher: Canonical
+        sku: 16.04-LTS
+        version: latest
+      state: present
+
+  - name: Display VM name and Public IP address
+    debug:
+      msg: "VM Name: {{ vm_prefix }}_{{ location }}_{{ next_vm_number }}, Public IP: {{ item.network_interfaces[0].ip_configurations[0].public_ip_address }}"
+    loop: "{{ azure_rm_virtualmachine_info.virtual_machines }}"
+    when: item.name == "{{ vm_prefix }}_{{ location }}_{{ next_vm_number }}"
